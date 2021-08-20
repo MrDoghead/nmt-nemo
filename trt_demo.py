@@ -2,9 +2,19 @@ import tensorrt as trt
 import numpy as np
 import torch
 from modules.trt_helper import EncWrapper, DecInitWrapper, DecWrapper
+from modules.embedding import TransformerEmbedding 
 
 device = torch.device('cpu')
 beam_size = 4
+
+embedding = TransformerEmbedding(
+            vocab_size = 32000,
+            hidden_size = 1024,
+            max_sequence_length = 512,
+            num_token_types = 2,
+            learn_positional_encodings = False,
+        )
+embedding.restore_from(chk_path='./model_bin/model_weights.ckpt')
 
 def mask_padded_tokens(tokens, pad_id):
     mask = np.array((tokens != pad_id),dtype=np.int32)
@@ -33,7 +43,6 @@ def encode(enc_trt_path):
     enc_outputs = enc_wrapper.do_inference(
             src_ids,
             src_mask,
-            shape_of_output,
             batch_size)
     last_hidden_states = enc_outputs[0].reshape(shape_of_output)
     print('enc_outputs:',last_hidden_states)
@@ -71,7 +80,6 @@ def decode_init(dec_trt_path,encoder_states=None,encoder_mask=None):
             decoder_mask,
             encoder_states,
             encoder_mask,
-            shape_of_output,
             batch_size)
     decoder_mems = dec_output[0].reshape(shape_of_output)
     print('decoder_mems:',decoder_mems)
@@ -114,7 +122,6 @@ def decode(dec_trt_path, decoder_mems=None, encoder_states=None, encoder_mask=No
             encoder_states,
             encoder_mask,
             decoder_mems,
-            shape_of_output,
             batch_size)
     decoder_mems = dec_output[0].reshape(shape_of_output)
     print('decoder_mems:',decoder_mems)
@@ -127,15 +134,21 @@ def main():
     dec_init_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp32.trt'
     dec_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp32.trt'
 
-    encoder_states,encoder_mask = encode(enc_trt_path)
-    decoder_mems = decode_init(dec_init_trt_path,encoder_states,encoder_mask)
+    #encoder_states,encoder_mask = encode(enc_trt_path)
+    #decoder_mems = decode_init(dec_init_trt_path,encoder_states,encoder_mask)
 
-    _,src_length,hidden_size = encoder_states.shape
-    encoder_states = encoder_states.repeat(1, beam_size, 1).view(-1, src_length, hidden_size)
-    encoder_mask = encoder_mask.repeat(1, beam_size).view(-1, src_length)
-    #for j in range(len(decoder_mems)):
-    #        decoder_mems[j] = decoder_mems[j].repeat(beam_size, 1, 1)
-    decoer_mems2 = decode(dec_trt_path, decoder_mems=None, encoder_states=encoder_states, encoder_mask=encoder_mask)
+    #_,src_length,hidden_size = encoder_states.shape
+    #encoder_states = encoder_states.repeat(1, beam_size, 1).view(-1, src_length, hidden_size)
+    #encoder_mask = encoder_mask.repeat(1, beam_size).view(-1, src_length)
+    #decoer_mems2 = decode(dec_trt_path, decoder_mems=None, encoder_states=encoder_states, encoder_mask=encoder_mask)
+    
+    dec_ids = torch.tensor([[   0],[3406],[   0],[   3]]).to(device)
+    dec_states = embedding(dec_ids)
+    dec_mask = torch.tensor([[[0],[1],[0],[1]]]).to(device)
+    enc_states = torch.randn((4, 11, 1024)).to(device)
+    enc_mask = torch.ones((4, 11)).to(device)
+    decoder_mems = torch.randn((7,4,10,1024)).to(device)
+    decoer_mems = decode(dec_trt_path, decoder_mems=decoder_mems, encoder_states=enc_states, encoder_mask=enc_mask)
 
 if __name__ == '__main__':
     main()

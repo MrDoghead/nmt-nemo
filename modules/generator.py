@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from modules.trt_helper import DecWrapper
+from modules.trt_helper import DecInitWrapper, DecWrapper
 from modules.embedding import TransformerEmbedding
 
 NEG_INF = -10000.0
@@ -16,7 +16,7 @@ class BeamSearchGenerator:
             self,
             vocab_size,
             hidden_size,
-            max_sequence_length,
+            dec_init_trt_path,
             dec_trt_path,
             pad=0,
             bos=1,
@@ -30,7 +30,7 @@ class BeamSearchGenerator:
         super().__init__()
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.max_sequence_length = max_sequence_length
+        self.dec_init_trt_path = dec_init_trt_path
         self.dec_trt_path = dec_trt_path
         self.pad, self.bos, self.eos = pad, bos, eos
         self.max_seq_length = max_sequence_length
@@ -41,7 +41,7 @@ class BeamSearchGenerator:
         self.embedding = TransformerEmbedding(
             vocab_size = self.vocab_size,
             hidden_size = self.hidden_size,
-            max_sequence_length = self.max_sequence_length,
+            max_sequence_length = self.max_seq_length,
             num_token_types = 2,
             learn_positional_encodings = False,
         )
@@ -106,40 +106,53 @@ class BeamSearchGenerator:
                 of sequence (x[1], ..., x[k-1]) for fast generation of x[k]
             pos: starting position in positional encoding
         """
-        decoder_hidden_states = self.embedding(decoder_input_ids, start_pos=pos)
+        decoder_states = self.embedding(decoder_input_ids, start_pos=pos)
+        decoder_mask = mask_padded_tokens(decoder_input_ids, self.pad)
+
         # convert torch to numpy to match the format of trt input
-        decoder_input_ids = decoder_input_ids.numpy().astype(np.int32)
+        decoder_states = decoder_states.numpy()
         encoder_hidden_states = encoder_hidden_states.numpy()
         encoder_input_mask = encoder_input_mask.numpy().astype(np.int32)
 
-        decoder_input_mask = mask_padded_tokens(decoder_input_ids, self.pad)
         batch_size, _, hidden_size = encoder_hidden_states.shape
-        shape_of_output = (batch_size, pos+1, hidden_size)
+        shape_of_output = (7, batch_size, pos+1, hidden_size)
 
         # tensorRT decoder engine
         print('===== decoder =====')
-        print('decoder_input_ids:',decoder_input_ids)
-        print('decoder_input_mask:',decoder_input_mask)
-        print('encoder_hidden_states:',encoder_hidden_states)
+        print('decoder_input_ids:',decoder_input_ids.shape)
+        print('decoder states:',decoder_states.shape)
+        print('decoder_mask:',decoder_mask.shape)
         print('encoder_hidden_states.shape:',encoder_hidden_states.shape)
-        print('encoder_input_mask:',encoder_input_mask)
         print('encoder_input_mask.shape',encoder_input_mask.shape)
         print('shape_of_output:',shape_of_output)
         print('batch size:',batch_size)
-        dec_wrapper = DecWrapper(trt_path=self.dec_trt_path)
-        dec_output = dec_wrapper.do_inference(
-            decoder_input_ids,
-            decoder_input_mask,
-            encoder_hidden_states,
-            encoder_input_mask,
-            shape_of_output,
-            batch_size
-        )
+
+        if decoder_mems_list is None:
+            dec_init_wrapper = DecInitWrapper(trt_path=self.dec_init_trt_path) 
+            dec_output = dec_init_wrapper.do_inference(
+                decoder_states,
+                decoder_mask,
+                encoder_hidden_states,
+                encoder_input_mask,
+                batch_size
+            )
+        else:
+            decoder_mems_list = decoder_mems_list.numpy()
+            print('decoder_mems_list:',decoder_mems_list.shape)
+            dec_wrapper = DecWrapper(trt_path=self.dec_trt_path)
+            dec_output = dec_wrapper.do_inference(
+                decoder_states,
+                decoder_mask,
+                encoder_hidden_states,
+                encoder_input_mask,
+                decoder_mems_list,
+                batch_size
+            )
         decoder_mems_list = dec_output[0].reshape(shape_of_output)
-        print('decoder output:',decoder_hidden_states)
+        print('decoder output:',decoder_mems_list.shape)
         # convert back to tensor
         decoder_mems_list = torch.from_numpy(decoder_mems_list).to(device)
-        log_probs = self.log_softmax(hidden_states=decoder_mems_list)
+        log_probs = self.log_softmax(hidden_states=decoder_mems_list[-1][:, -1:])
         return log_probs, decoder_mems_list
 
     def forward(self, decoder_input_ids=None, encoder_hidden_states=None, encoder_input_mask=None):
@@ -160,8 +173,11 @@ class BeamSearchGenerator:
         # [bs,1] -> [bs,4] -> [4*bs,1] cat [4*bs,1] -> [4*bs,2]
         # [bs,1,1024] -> [4*bs,1,1024]
         prefixes = torch.cat((tgt.repeat(1, self.beam_size).view(-1, 1), prefixes), dim=1)
+        cached_mems = []
         for j in range(len(decoder_mems_list)):
-            decoder_mems_list[j] = decoder_mems_list[j].repeat(self.beam_size, 1, 1)
+            tmp = decoder_mems_list[j].repeat(self.beam_size, 1, 1)
+            cached_mems.append(tmp.unsqueeze(0))
+        decoder_mems_list = torch.cat(cached_mems,0)
 
         # repeat source sequence beam_size times for beam search
         # [bs,seq] -> [4*bs,seq]
@@ -184,6 +200,7 @@ class BeamSearchGenerator:
         prefixes_len = torch.zeros_like(scores).fill_(prefixes.size(1) + 1)
 
         for i in range(max_generation_length):
+            print(f'\nRound {i} / {max_generation_length}:')
 
             # mask all finished hypotheses to exclude them from beam
             pad_mask = pad_profile.repeat(1, self.beam_size)
@@ -242,12 +259,12 @@ class BeamSearchGenerator:
             if pad_profile.sum() == batch_size * self.beam_size:
                 break
 
-    # select best performing hypotheses in each element of the batch
-    len_penalties = self.compute_len_penalty(prefixes_len, self.len_pen)
-    scores = scores / len_penalties
-    best_guesses = (
-        torch.argmax(scores.view(-1, self.beam_size), dim=1, keepdim=True).repeat(1, prefixes.size(1)).unsqueeze(1)
-    )
-    tgt = prefixes.view(batch_size, self.beam_size, -1).gather(1, best_guesses)
+        # select best performing hypotheses in each element of the batch
+        len_penalties = self.compute_len_penalty(prefixes_len, self.len_pen)
+        scores = scores / len_penalties
+        best_guesses = (
+            torch.argmax(scores.view(-1, self.beam_size), dim=1, keepdim=True).repeat(1, prefixes.size(1)).unsqueeze(1)
+        )
+        tgt = prefixes.view(batch_size, self.beam_size, -1).gather(1, best_guesses)
 
-    return tgt.squeeze(1)
+        return tgt.squeeze(1)

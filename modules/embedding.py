@@ -111,7 +111,16 @@ if __name__=='__main__':
             learn_positional_encodings = False,
         )
     embedding.restore_from('../model_bin/model_weights.ckpt')
-    x = torch.randint(0,100,(2,5),dtype=torch.int64).to(torch.device('cpu'))
+    #x = torch.randint(0,100,(2,5),dtype=torch.int64).to(torch.device('cpu'))
+    x = torch.tensor([[   0],
+        [3406],
+        [   0],
+        [   3],
+        [4983],
+        [3547],
+        [4983],
+        [3065]],dtype=torch.int64).to(torch.device('cpu'))
     x_emb = embedding(x)
     print('x:',x)
     print('x embedding:',x_emb)
+    print('x type',x.dtype)

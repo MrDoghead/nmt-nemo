@@ -10,7 +10,6 @@ from modules.generator import BeamSearchGenerator
 
 VOCAB_SIZE = 32000
 HIDDEN_SIZE = 1024
-MAX_SEQ_LENGTH = 512
 device = torch.device('cpu')
 
 encoder_tokenizer = YouTokenToMeTokenizer(
@@ -22,8 +21,13 @@ decoder_tokenizer = YouTokenToMeTokenizer(
         bpe_dropout=0.0,
         legacy=False)
 
-enc_trt_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp32.trt'
-dec_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp32.trt'
+enc_trt_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp16.trt'
+dec_init_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp16.trt'
+dec_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp16.trt'
+
+def filter_predicted_ids(ids):
+    ids[ids >= decoder_tokenizer.vocab_size] = decoder_tokenizer.unk_id
+    return ids
 
 def setup_processor(src_lang, tgt_lang):
     src_processor, tgt_processor = None, None
@@ -37,7 +41,7 @@ def setup_processor(src_lang, tgt_lang):
         tgt_processor = MosesProcessor(tgt_lang)
     return src_processor, tgt_processor
 
-def batch_translate(src_ids, src_mask, args):
+def batch_translate(src_ids, src_mask, args, source_processor, target_processor):
     batch_size = args.batch_size
     seq_len = src_ids.shape[1]
     shape_of_output = (batch_size, seq_len, HIDDEN_SIZE)
@@ -46,7 +50,6 @@ def batch_translate(src_ids, src_mask, args):
     enc_outputs = enc_wrapper.do_inference(
             src_ids,
             src_mask,
-            shape_of_output,
             batch_size)
     src_hiddens = enc_outputs[0].reshape(shape_of_output)
     # convert numpy back to tensor
@@ -54,9 +57,9 @@ def batch_translate(src_ids, src_mask, args):
     encoder_input_mask = torch.from_numpy(src_mask).to(device)
 
     beam_search = BeamSearchGenerator(
-            vocab_size=VOCAB_SIZE,
-            hidden_size=HIDDEN_SIZE,
-            max_sequence_length=MAX_SEQ_LENGTH,
+            VOCAB_SIZE,
+            HIDDEN_SIZE,
+            dec_init_trt_path,
             dec_trt_path,
             pad=decoder_tokenizer.pad_id,
             bos=decoder_tokenizer.bos_id,
@@ -67,19 +70,17 @@ def batch_translate(src_ids, src_mask, args):
             beam_size=args.beam_size,
             len_pen=args.len_pen)
     beam_results = beam_search.forward(encoder_hidden_states=encoder_hidden_states, encoder_input_mask=encoder_input_mask)
-
-    sys.exit()
     beam_results = filter_predicted_ids(beam_results)
 
-    translations = [self.decoder_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
-    inputs = [self.encoder_tokenizer.ids_to_text(inp) for inp in src.cpu().numpy()]
-    if self.target_processor is not None:
+    translations = [decoder_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
+    inputs = [encoder_tokenizer.ids_to_text(inp) for inp in src_ids]
+    if target_processor is not None:
         translations = [
-            self.target_processor.detokenize(translation.split(' ')) for translation in translations
+            target_processor.detokenize(translation.split(' ')) for translation in translations
         ]
 
-    if self.source_processor is not None:
-        inputs = [self.source_processor.detokenize(item.split(' ')) for item in inputs]
+    if source_processor is not None:
+        inputs = [source_processor.detokenize(item.split(' ')) for item in inputs]
 
     return inputs, translations
 
@@ -103,7 +104,8 @@ def translate(text, args):
     for i, txt in enumerate(inputs):
         src_ids[i][: len(txt)] = txt
     src_mask = np.array((src_ids != encoder_tokenizer.pad_id),dtype=np.int32)
-    _, translations = batch_translate(src_ids, src_mask, args)
+    _, translations = batch_translate(src_ids, src_mask, args, src_processor, tgt_processor)
+    print('translations:',translations)
 
     return translations
 
@@ -126,27 +128,25 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
     logging.info(f"Translating: {args.src_file}")
-    torch.set_grad_enabled(False)
 
     src_text = []
     pred_text = []
     count = 0
-    with open(args.src_file, 'r') as src_f:
+    with open(args.src_file, 'r') as src_f, torch.no_grad():
         for line in src_f:
             src_text.append(line.strip())
             if len(src_text) == args.batch_size:
                 res = translate(src_text, args)
-                sys.exit()
                 pred_text += res
                 src_text = []
             count += 1
-            if count != 0 and count % 300 == 0:
+            if count != 0 and count % 50 == 0:
                print(f"Translated {count} sentences")
         if len(src_text) > 0:
             pred_text += translate(src_text, args)
 
     with open(args.tgt_save, 'w') as tgt_f:
-        for line in tgt_text:
+        for line in pred_text:
             tgt_f.write(line + "\n")
 
 if __name__=='__main__':

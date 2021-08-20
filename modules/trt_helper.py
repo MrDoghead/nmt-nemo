@@ -22,14 +22,11 @@ class HostDeviceMem(object):
 class TrtWrapper():
     def __init__(self, trt_path=""):
         self.trt_path = trt_path
-        if os.path.exists(trt_path):
-            self.get_engine(trt_path)
-        else:
-            self.build_engine()
 
     def get_engine(self,path):
         with open(path,'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
-            self.engine = runtime.deserialize_cuda_engine(f.read())
+            engine = runtime.deserialize_cuda_engine(f.read())
+            return engine
     
     def build_engine(self):
         raise NotImplementedError
@@ -61,91 +58,91 @@ class EncWrapper(TrtWrapper):
     def __init__(self,trt_path):
         super(EncWrapper,self).__init__(trt_path)
     
-    def do_inference(self, src, src_mask, output_shape, batch_size=1):
-        context = self.engine.create_execution_context()
-        context.active_optimization_profile = 0
-        shapes = [src.shape, src_mask.shape, output_shape]
-        # reshape bindings before doing inference
-        for i,shape in enumerate(shapes):
-            binding_shape = context.get_binding_shape(i)
-            for j in range(len(shape)):
-                binding_shape[j] = shape[j]
-            context.set_binding_shape(i,(binding_shape))
-        inputs, outputs, bindings, stream = self.allocate_buffers(self.engine,context)
-        inputs[0].host = src
-        inputs[1].host = src_mask
+    def do_inference(self, src, src_mask, batch_size=1):
+        with self.get_engine(self.trt_path) as engine, engine.create_execution_context() as context:
+            context.active_optimization_profile = 0
+            shapes = [src.shape, src_mask.shape]
+            # reshape bindings before doing inference
+            for i,shape in enumerate(shapes):
+                binding_shape = context.get_binding_shape(i)
+                for j in range(len(shape)):
+                    binding_shape[j] = shape[j]
+                context.set_binding_shape(i,(binding_shape))
+            inputs, outputs, bindings, stream = self.allocate_buffers(engine,context)
+            inputs[0].host = src
+            inputs[1].host = src_mask
 
-        # Transfer data from CPU to the GPU.
-        [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
-        # Run inference.
-        context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
-        # Transfer predictions back from the GPU.
-        [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
-        # Synchronize the stream
-        stream.synchronize()
-        # Return only the host outputs.
-        return [out.host for out in outputs]
+            # Transfer data from CPU to the GPU.
+            [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
+            # Run inference.
+            context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
+            # Transfer predictions back from the GPU.
+            [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
+            # Synchronize the stream
+            stream.synchronize()
+            # Return only the host outputs.
+            return [out.host for out in outputs]
             
 class DecInitWrapper(TrtWrapper):
     def __init__(self,trt_path):
         super(DecInitWrapper,self).__init__(trt_path)
 
-    def do_inference(self, decoder_states, decoder_mask, encoder_states, encoder_mask, output_shape, batch_size=1):
-        context = self.engine.create_execution_context()
-        context.active_optimization_profile = 0
-        shapes = [decoder_states.shape, decoder_mask.shape, encoder_states.shape, encoder_mask.shape, output_shape]
-        # reshape bindings before doing inference
-        for i,shape in enumerate(shapes):
-            binding_shape = context.get_binding_shape(i)
-            for j in range(len(shape)):
-                binding_shape[j] = shape[j]
-            context.set_binding_shape(i,(binding_shape))
-        inputs, outputs, bindings, stream = self.allocate_buffers(self.engine,context)
-        inputs[0].host = decoder_states
-        inputs[1].host = decoder_mask
-        inputs[2].host = encoder_states
-        inputs[3].host = encoder_mask
+    def do_inference(self, decoder_states, decoder_mask, encoder_states, encoder_mask, batch_size=1):
+        with self.get_engine(self.trt_path) as engine, engine.create_execution_context() as context:
+            context.active_optimization_profile = 0
+            shapes = [decoder_states.shape, decoder_mask.shape, encoder_states.shape, encoder_mask.shape]
+            # reshape bindings before doing inference
+            for i,shape in enumerate(shapes):
+                binding_shape = context.get_binding_shape(i)
+                for j in range(len(shape)):
+                    binding_shape[j] = shape[j]
+                context.set_binding_shape(i,(binding_shape))
+            inputs, outputs, bindings, stream = self.allocate_buffers(engine,context)
+            inputs[0].host = decoder_states
+            inputs[1].host = decoder_mask
+            inputs[2].host = encoder_states
+            inputs[3].host = encoder_mask
 
-        # Transfer data from CPU to the GPU.
-        [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
-        # Run inference.
-        context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
-        # Transfer predictions back from the GPU.
-        [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
-        # Synchronize the stream
-        stream.synchronize()
-        # Return only the host outputs.
-        return [out.host for out in outputs]
+            # Transfer data from CPU to the GPU.
+            [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
+            # Run inference.
+            context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
+            # Transfer predictions back from the GPU.
+            [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
+            # Synchronize the stream
+            stream.synchronize()
+            # Return only the host outputs.
+            return [out.host for out in outputs]
 
 class DecWrapper(TrtWrapper):
     def __init__(self,trt_path):
         super(DecWrapper,self).__init__(trt_path)
 
-    def do_inference(self, decoder_states, decoder_mask, encoder_states, encoder_mask, decoder_mems, output_shape, batch_size=1):
-        context = self.engine.create_execution_context()
-        context.active_optimization_profile = 0
-        shapes = [decoder_states.shape, decoder_mask.shape, encoder_states.shape, encoder_mask.shape, decoder_mems.shape, output_shape]
-        # reshape bindings before doing inference
-        for i,shape in enumerate(shapes):
-            binding_shape = context.get_binding_shape(i)
-            for j in range(len(shape)):
-                binding_shape[j] = shape[j]
-            context.set_binding_shape(i,(binding_shape))
-        inputs, outputs, bindings, stream = self.allocate_buffers(self.engine,context)
-        inputs[0].host = decoder_states
-        inputs[1].host = decoder_mask
-        inputs[2].host = encoder_states
-        inputs[3].host = encoder_mask
-        inputs[4].host = decoder_mems
+    def do_inference(self, decoder_states, decoder_mask, encoder_states, encoder_mask, decoder_mems, batch_size=1):
+        with self.get_engine(self.trt_path) as engine, engine.create_execution_context() as context:
+            context.active_optimization_profile = 0
+            shapes = [decoder_states.shape, decoder_mask.shape, encoder_states.shape, encoder_mask.shape, decoder_mems.shape]
+            # reshape bindings before doing inference
+            for i,shape in enumerate(shapes):
+                binding_shape = context.get_binding_shape(i)
+                for j in range(len(shape)):
+                    binding_shape[j] = shape[j]
+                context.set_binding_shape(i,(binding_shape))
+            inputs, outputs, bindings, stream = self.allocate_buffers(engine,context)
+            inputs[0].host = decoder_states
+            inputs[1].host = decoder_mask
+            inputs[2].host = encoder_states
+            inputs[3].host = encoder_mask
+            inputs[4].host = decoder_mems
 
-        # Transfer data from CPU to the GPU.
-        [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
-        # Run inference.
-        context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
-        # Transfer predictions back from the GPU.
-        [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
-        # Synchronize the stream
-        stream.synchronize()
-        # Return only the host outputs.
-        return [out.host for out in outputs]
+            # Transfer data from CPU to the GPU.
+            [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
+            # Run inference.
+            context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
+            # Transfer predictions back from the GPU.
+            [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
+            # Synchronize the stream
+            stream.synchronize()
+            # Return only the host outputs.
+            return [out.host for out in outputs]
 
