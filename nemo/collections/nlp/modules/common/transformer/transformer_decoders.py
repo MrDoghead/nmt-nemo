@@ -107,14 +107,10 @@ class TransformerDecoderBlock(nn.Module):
         self_attn_output = self.layer_norm_1(self_attn_output)
 
         enc_dec_attn_output = self.second_sub_layer(self_attn_output, encoder_states, encoder_states, encoder_mask)
-        #print('enc_dec_attn_output',enc_dec_attn_output.shape)
-        #print('self_attn_output',self_attn_output.shape)
         enc_dec_attn_output += self_attn_output
         enc_dec_attn_output = self.layer_norm_2(enc_dec_attn_output)
 
         output_states = self.third_sub_layer(enc_dec_attn_output)
-        #print('output_states',output_states.shape)
-        #print('enc_dec_attn_output',enc_dec_attn_output.shape)
         output_states += enc_dec_attn_output
         return self.layer_norm_3(output_states)
 

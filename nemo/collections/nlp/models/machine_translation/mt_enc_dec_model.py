@@ -27,6 +27,7 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 from pytorch_lightning import Trainer
 from pytorch_lightning.utilities import rank_zero_only
 from sacrebleu import corpus_bleu
+import time
 
 from nemo.collections.common.data import ConcatDataset
 from nemo.collections.common.losses import NLLLoss, SmoothedCrossEntropyLoss
@@ -694,8 +695,14 @@ class MTEncDecModel(EncDecNLPModel):
         mode = self.training
         try:
             self.eval()
+            t0=time.perf_counter()
             src_hiddens = self.encoder(input_ids=src, encoder_mask=src_mask)
+            t1=time.perf_counter()
             beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
+            t2=time.perf_counter()
+            print('enc time:',t1-t0)
+            print('beam search time:',t2-t1)
+            t3=time.perf_counter()
             beam_results = self.filter_predicted_ids(beam_results)
 
             translations = [self.decoder_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
@@ -707,6 +714,8 @@ class MTEncDecModel(EncDecNLPModel):
 
             if self.source_processor is not None:
                 inputs = [self.source_processor.detokenize(item.split(' ')) for item in inputs]
+            t4=time.perf_counter()
+            print('postprocess time:',t4-t3)
         finally:
             self.train(mode=mode)
         return inputs, translations
@@ -725,6 +734,7 @@ class MTEncDecModel(EncDecNLPModel):
             list of translated strings
         """
         # __TODO__: This will reset both source and target processors even if you want to reset just one.
+        t0=time.perf_counter()
         if source_lang is not None or target_lang is not None:
             self.setup_pre_and_post_processing_utils(source_lang, target_lang)
 
@@ -754,6 +764,8 @@ class MTEncDecModel(EncDecNLPModel):
             
             src_mask = torch.FloatTensor((src_ids_ != self.encoder_tokenizer.pad_id)).to(self.device)
             src = torch.LongTensor(src_ids_).to(self.device)
+            t1=time.perf_counter()
+            print('preprocess time:',t1-t0)
             _, translations = self.batch_translate(src, src_mask)
         finally:
             self.train(mode=mode)

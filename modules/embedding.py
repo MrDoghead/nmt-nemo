@@ -64,15 +64,15 @@ class TransformerEmbedding(nn.Module):
         self.dropout = nn.Dropout(embedding_dropout)
 
     def restore_from(self,chk_path):
-        chk = torch.load(chk_path,map_location='cpu')
+        chk = torch.load(chk_path,map_location='cuda:0' if torch.cuda.is_available() else 'cpu')
         tok_emb_weight = chk['decoder._embedding.token_embedding.weight']
-        #pos_enc = chk['decoder._embedding.position_embedding.pos_enc']
+        pos_enc = chk['decoder._embedding.position_embedding.pos_enc']
         type_emb = chk['decoder._embedding.token_type_embedding.weight']
         lm_weight = chk['decoder._embedding.layer_norm.weight']
         lm_bias = chk['decoder._embedding.layer_norm.bias']
 
         self.token_embedding.weight = torch.nn.Parameter(tok_emb_weight)
-        #self.position_embedding = pos_enc
+        self.pos_enc = pos_enc
         self.token_type_embedding = torch.nn.Parameter(type_emb)
         self.layer_norm.weight = torch.nn.Parameter(lm_weight)
         self.layer_norm.bias = torch.nn.Parameter(lm_bias)
@@ -91,7 +91,8 @@ class TransformerEmbedding(nn.Module):
         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
 
         token_embeddings = self.token_embedding(input_ids)
-        position_embeddings = self.position_embedding(position_ids)
+        #position_embeddings = self.position_embedding(position_ids)
+        position_embeddings = torch.embedding(self.pos_enc, position_ids)
         embeddings = token_embeddings + position_embeddings
 
         if token_type_ids is not None:
@@ -112,14 +113,7 @@ if __name__=='__main__':
         )
     embedding.restore_from('../model_bin/model_weights.ckpt')
     #x = torch.randint(0,100,(2,5),dtype=torch.int64).to(torch.device('cpu'))
-    x = torch.tensor([[   0],
-        [3406],
-        [   0],
-        [   3],
-        [4983],
-        [3547],
-        [4983],
-        [3065]],dtype=torch.int64).to(torch.device('cpu'))
+    x = torch.tensor([[2]], dtype=torch.int64).to(torch.device('cuda:0'))
     x_emb = embedding(x)
     print('x:',x)
     print('x embedding:',x_emb)

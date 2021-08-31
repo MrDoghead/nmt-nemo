@@ -1,15 +1,19 @@
 import torch
 import numpy as np
-from modules.trt_helper import DecInitWrapper, DecWrapper
+import tensorrt as trt
+import time
+
 from modules.embedding import TransformerEmbedding
+from modules.trt_helper import DecInitWrapper, DecWrapper 
 
 NEG_INF = -10000.0
-device = torch.device('cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available else 'cpu')
+TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 def mask_padded_tokens(tokens, pad_id):
-    mask = np.array((tokens != pad_id),dtype=np.int32)
-    #mask = tokens != pad_id
-    return mask
+    #mask = np.array((tokens != pad_id),dtype=np.int32)
+    mask = tokens != pad_id
+    return mask.to(torch.int32)
 
 class BeamSearchGenerator:
     def __init__(
@@ -25,7 +29,8 @@ class BeamSearchGenerator:
             max_delta_length=20,
             batch_size=1,
             beam_size=4,
-            len_pen=0.6
+            len_pen=0.6,
+            chk_path=None
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -38,6 +43,10 @@ class BeamSearchGenerator:
         self.batch_size = batch_size
         self.beam_size = beam_size
         self.len_pen = len_pen
+        self.chk_path = chk_path
+
+        self.decoder_init = DecInitWrapper(self.dec_init_trt_path)
+        self.decoder = DecWrapper(self.dec_trt_path)
         self.embedding = TransformerEmbedding(
             vocab_size = self.vocab_size,
             hidden_size = self.hidden_size,
@@ -45,7 +54,10 @@ class BeamSearchGenerator:
             num_token_types = 2,
             learn_positional_encodings = False,
         )
-        self.embedding.restore_from(chk_path='./model_bin/model_weights.ckpt')
+        self.embedding.restore_from(self.chk_path)
+        self.chk = torch.load(chk_path, map_location='cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.log_softmax_mlp_weight = self.chk['log_softmax.mlp.layer0.weight']
+        self.log_softmax_mlp_bias = self.chk['log_softmax.mlp.layer0.bias']
 
     @staticmethod
     def compute_len_penalty(lengths, alpha):
@@ -75,13 +87,8 @@ class BeamSearchGenerator:
         return tgt, batch_size, max_generation_length
 
     def log_softmax(self, hidden_states):
-        chk_path = './model_bin/model_weights.ckpt'
-        chk = torch.load(chk_path)
-        weight = chk['log_softmax.mlp.layer0.weight'].to(device)
-        bias = chk['log_softmax.mlp.layer0.bias'].to(device)
-
-        mlp_layer0_out = torch.matmul(hidden_states, weight.transpose(0,1)) \
-                + bias.view(1,1,-1)
+        mlp_layer0_out = torch.matmul(hidden_states, self.log_softmax_mlp_weight.transpose(0,1)) \
+                + self.log_softmax_mlp_bias.view(1,1,-1)
         log_probs = torch.log_softmax(mlp_layer0_out, dim=-1)
         return log_probs
 
@@ -89,7 +96,7 @@ class BeamSearchGenerator:
             self,
             decoder_input_ids=None,
             encoder_hidden_states=None,
-            encoder_input_mask=None,
+            encoder_mask=None,
             decoder_mems_list=None,
             pos=0
         ):
@@ -101,68 +108,60 @@ class BeamSearchGenerator:
             encoder_hidden_states: output of the encoder for conditional
                 sequence generation; if None, generator will use unconditional
                 mode (e.g., language modeling)
-            encoder_input_mask: input mask used in the encoder
+            encoder_mask: input mask used in the encoder
             decoder_mems_list: list of size num_layers with cached activations
                 of sequence (x[1], ..., x[k-1]) for fast generation of x[k]
             pos: starting position in positional encoding
         """
+        # print('decoder_input_ids',decoder_input_ids)
         decoder_states = self.embedding(decoder_input_ids, start_pos=pos)
         decoder_mask = mask_padded_tokens(decoder_input_ids, self.pad)
-
-        # convert torch to numpy to match the format of trt input
-        decoder_states = decoder_states.numpy()
-        encoder_hidden_states = encoder_hidden_states.numpy()
-        encoder_input_mask = encoder_input_mask.numpy().astype(np.int32)
 
         batch_size, _, hidden_size = encoder_hidden_states.shape
         shape_of_output = (7, batch_size, pos+1, hidden_size)
 
         # tensorRT decoder engine
-        print('===== decoder =====')
-        print('decoder_input_ids:',decoder_input_ids.shape)
-        print('decoder states:',decoder_states.shape)
-        print('decoder_mask:',decoder_mask.shape)
-        print('encoder_hidden_states.shape:',encoder_hidden_states.shape)
-        print('encoder_input_mask.shape',encoder_input_mask.shape)
-        print('shape_of_output:',shape_of_output)
-        print('batch size:',batch_size)
-
+        cached_mems = torch.zeros(shape_of_output).cuda()
         if decoder_mems_list is None:
-            dec_init_wrapper = DecInitWrapper(trt_path=self.dec_init_trt_path) 
-            dec_output = dec_init_wrapper.do_inference(
-                decoder_states,
-                decoder_mask,
-                encoder_hidden_states,
-                encoder_input_mask,
-                batch_size
-            )
+            decoder_tensors = {
+                    "inputs":
+                    {   "decoder_states": decoder_states,
+                        "decoder_mask": decoder_mask,
+                        "encoder_states": encoder_hidden_states,
+                        "encoder_mask": encoder_mask},
+                    "outputs":
+                    {   "cached_mens": cached_mems}
+            }
+            #print('decoder_tensors:',decoder_tensors)
+            self.decoder_init.run_trt_engine(decoder_tensors)
         else:
-            decoder_mems_list = decoder_mems_list.numpy()
-            print('decoder_mems_list:',decoder_mems_list.shape)
-            dec_wrapper = DecWrapper(trt_path=self.dec_trt_path)
-            dec_output = dec_wrapper.do_inference(
-                decoder_states,
-                decoder_mask,
-                encoder_hidden_states,
-                encoder_input_mask,
-                decoder_mems_list,
-                batch_size
-            )
-        decoder_mems_list = dec_output[0].reshape(shape_of_output)
-        print('decoder output:',decoder_mems_list.shape)
-        # convert back to tensor
-        decoder_mems_list = torch.from_numpy(decoder_mems_list).to(device)
+            decoder_tensors = {
+                    "inputs":
+                    {   "decoder_states": decoder_states,
+                        "decoder_mask": decoder_mask,
+                        "encoder_states": encoder_hidden_states,
+                        "encoder_mask": encoder_mask,
+                        "decoder_mems": decoder_mems_list},
+                    "outputs":
+                    {   "cached_mens": cached_mems}
+            }
+            #print('decoder_tensors:',decoder_tensors)
+            self.decoder.run_trt_engine(decoder_tensors)
+        decoder_mems_list = cached_mems
+
+        #print('decoder output:',decoder_mems_list)
         log_probs = self.log_softmax(hidden_states=decoder_mems_list[-1][:, -1:])
+
         return log_probs, decoder_mems_list
 
-    def forward(self, decoder_input_ids=None, encoder_hidden_states=None, encoder_input_mask=None):
+    def forward(self, decoder_input_ids=None, encoder_hidden_states=None, encoder_mask=None):
         tgt, batch_size, max_generation_length = self._prepare_for_search(decoder_input_ids, encoder_hidden_states)
 
         # generate initial buffer of beam_size prefixes-hypotheses
         log_probs, decoder_mems_list = self._one_step_forward(
                 decoder_input_ids = tgt, 
                 encoder_hidden_states = encoder_hidden_states, 
-                encoder_input_mask = encoder_input_mask, 
+                encoder_mask = encoder_mask, 
                 decoder_mems_list = None,
                 pos = 0)
         # [bs,1,32000] -> [bs,32000,1] -> [bs,4,1]
@@ -184,7 +183,7 @@ class BeamSearchGenerator:
         # [bs,seq,1024] -> [4*bs,seq,1024]
         if encoder_hidden_states is not None:
             _, src_length, hidden_size = encoder_hidden_states.size()
-            encoder_input_mask = encoder_input_mask.repeat(1, self.beam_size).view(-1, src_length)
+            encoder_mask = encoder_mask.repeat(1, self.beam_size).view(-1, src_length)
             encoder_hidden_states = encoder_hidden_states.repeat(1, self.beam_size, 1).view(
                 -1, src_length, hidden_size
             )
@@ -200,7 +199,7 @@ class BeamSearchGenerator:
         prefixes_len = torch.zeros_like(scores).fill_(prefixes.size(1) + 1)
 
         for i in range(max_generation_length):
-            print(f'\nRound {i} / {max_generation_length}:')
+            # print(f'\nRound {i} / {max_generation_length}:')
 
             # mask all finished hypotheses to exclude them from beam
             pad_mask = pad_profile.repeat(1, self.beam_size)
@@ -209,7 +208,7 @@ class BeamSearchGenerator:
             log_probs, decoder_mems_list = self._one_step_forward(
                 decoder_input_ids = prefixes[:, -1:], 
                 encoder_hidden_states = encoder_hidden_states, 
-                encoder_input_mask = encoder_input_mask, 
+                encoder_mask = encoder_mask, 
                 decoder_mems_list = decoder_mems_list,
                 pos = i + 1
             )

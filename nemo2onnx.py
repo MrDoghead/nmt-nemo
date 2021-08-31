@@ -96,5 +96,5 @@ if __name__=='__main__':
     model = nemo_nlp.models.machine_translation.MTEncDecModel.restore_from(restore_path=nemo_path)
 
     #export_encoder(encoder=model.encoder)
-    #export_decoder_init(decoder=model.decoder._decoder)
-    export_decoder_non_init(decoder=model.decoder._decoder)
+    export_decoder_init(decoder=model.decoder._decoder)
+    #export_decoder_non_init(decoder=model.decoder._decoder)

@@ -5,6 +5,7 @@ from modules.trt_helper import EncWrapper, DecInitWrapper, DecWrapper
 from modules.embedding import TransformerEmbedding 
 
 device = torch.device('cpu')
+#device = torch.device('cuda:0')
 beam_size = 4
 
 embedding = TransformerEmbedding(
@@ -34,6 +35,13 @@ def encode(enc_trt_path):
         src_ids[i][: len(txt)] = txt
     src_mask = np.array((src_ids != pad_id),dtype=np.int32)
     shape_of_output = (batch_size, max_len, hidden_size)
+
+    # testing
+    enc_input = torch.load('enc_input.pt')
+    src_ids = enc_input['input_ids'].cpu().numpy()
+    src_mask = enc_input['encoder_mask'].to(torch.int64).cpu().numpy()
+    batch_size,nax_len = src_ids.shape
+    shape_of_output = (batch_size, max_len, hidden_size)
     
     # inference
     print('===== encoder =====')
@@ -48,6 +56,7 @@ def encode(enc_trt_path):
     print('enc_outputs:',last_hidden_states)
     print('enc_outputs shape:',last_hidden_states.shape)
     print()
+    sys.exit()
     encoder_hidden_states = torch.from_numpy(last_hidden_states).to(device)
     encoder_input_mask = torch.from_numpy(src_mask).to(device)
     return encoder_hidden_states, encoder_input_mask
@@ -134,7 +143,7 @@ def main():
     dec_init_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp32.trt'
     dec_trt_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp32.trt'
 
-    #encoder_states,encoder_mask = encode(enc_trt_path)
+    encoder_states,encoder_mask = encode(enc_trt_path)
     #decoder_mems = decode_init(dec_init_trt_path,encoder_states,encoder_mask)
 
     #_,src_length,hidden_size = encoder_states.shape
@@ -142,6 +151,7 @@ def main():
     #encoder_mask = encoder_mask.repeat(1, beam_size).view(-1, src_length)
     #decoer_mems2 = decode(dec_trt_path, decoder_mems=None, encoder_states=encoder_states, encoder_mask=encoder_mask)
     
+    """
     dec_ids = torch.tensor([[   0],[3406],[   0],[   3]]).to(device)
     dec_states = embedding(dec_ids)
     dec_mask = torch.tensor([[[0],[1],[0],[1]]]).to(device)
@@ -149,6 +159,7 @@ def main():
     enc_mask = torch.ones((4, 11)).to(device)
     decoder_mems = torch.randn((7,4,10,1024)).to(device)
     decoer_mems = decode(dec_trt_path, decoder_mems=decoder_mems, encoder_states=enc_states, encoder_mask=enc_mask)
+    """
 
 if __name__ == '__main__':
     main()

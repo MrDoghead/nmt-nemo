@@ -58,7 +58,9 @@ def main():
 
     if torch.cuda.is_available():
         model = model.cuda()
-        print('Using cuda...')
+        logging.info('Using cuda...')
+    else:
+        logging.info('Using CPU...')
 
     logging.info(f"Translating: {args.srctext}")
 
@@ -68,24 +70,31 @@ def main():
             src_text.append(line.strip())
             if len(src_text) == args.batch_size:
                 print('src:',src_text)
+                import time
+                t1 = time.perf_counter()
                 res = model.translate(text=src_text, source_lang=args.source_lang, target_lang=args.target_lang)
+                t2 = time.perf_counter()
+                print(f'bs={args.batch_size} cost {t2-t1}s')
                 sys.exit()
                 if len(res) != len(src_text):
                     print(len(res))
                     print(len(src_text))
                     print(res)
                     print(src_text)
+                    break
                 tgt_text += res
                 src_text = []
             count += 1
-            # if count % 300 == 0:
-            #    print(f"Translated {count} sentences")
+            if count % 300 == 0:
+                print(f"Translated {count} sentences")
         if len(src_text) > 0:
             tgt_text += model.translate(text=src_text, source_lang=args.source_lang, target_lang=args.target_lang)
 
     with open(args.tgtout, 'w') as tgt_f:
         for line in tgt_text:
             tgt_f.write(line + "\n")
+
+    logging.info(f"saved at: {args.tgtout}")
 
 
 if __name__ == '__main__':

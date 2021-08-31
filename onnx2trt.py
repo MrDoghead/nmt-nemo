@@ -83,23 +83,23 @@ def build_engine(onnx_file_path, engine_file_path, max_batch_size=1, fp16_mode=F
 
 def build_encoder():
     enc_onnx_path = './model_bin/nmt_en_zh_transformer6x6_encoder.onnx'
-    #enc_engine_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp32.trt'
-    enc_engine_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp16.trt'
-    enc_engine = build_engine(enc_onnx_path, enc_engine_path, max_batch_size=16, fp16_mode=True, int8_mode=False, mode=0)
+    enc_engine_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp32.trt'
+    # enc_engine_path = './model_bin/nmt_en_zh_transformer6x6_encoder_fp16.trt'
+    enc_engine = build_engine(enc_onnx_path, enc_engine_path, max_batch_size=16, fp16_mode=False, int8_mode=False, mode=0)
 
 def build_decoder_init():
     dec_onnx_init_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init.onnx'
-    #dec_engine_init_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp32.trt'
-    dec_engine_init_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp16.trt'
-    dec_engine = build_engine(dec_onnx_init_path, dec_engine_init_path, max_batch_size=16, fp16_mode=True, int8_mode=False, mode=2)
+    dec_engine_init_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp32.trt'
+    # dec_engine_init_path = './model_bin/nmt_en_zh_transformer6x6_decoder_init_fp16.trt'
+    dec_engine = build_engine(dec_onnx_init_path, dec_engine_init_path, max_batch_size=16, fp16_mode=False, int8_mode=False, mode=2)
 
 def build_decoder_non_init():
     dec_onnx_path = './model_bin/nmt_en_zh_transformer6x6_decoder.onnx'
-    #dec_engine_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp32.trt'
-    dec_engine_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp16.trt'
-    dec_engine = build_engine(dec_onnx_path, dec_engine_path, max_batch_size=64, fp16_mode=True, int8_mode=False, mode=3)
+    dec_engine_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp32.trt'
+    # dec_engine_path = './model_bin/nmt_en_zh_transformer6x6_decoder_fp16.trt'
+    dec_engine = build_engine(dec_onnx_path, dec_engine_path, max_batch_size=64, fp16_mode=False, int8_mode=False, mode=3)
 
 if __name__ == '__main__':
-    #build_encoder()
-    #build_decoder_init()
+    build_encoder()
+    build_decoder_init()
     build_decoder_non_init()
