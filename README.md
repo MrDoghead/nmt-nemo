@@ -52,7 +52,7 @@ before doing inference, please make sure tokenizer models are provided or you ca
 tar -xvf ./model_bin/nmt_en_zh_transformer6x6.nemo
 ```
 
-please the configs before runing
+please check the configs before runing
 
 ```bash
 bash inference/trt_infer.sh
