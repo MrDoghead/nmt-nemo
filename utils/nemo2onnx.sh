@@ -1,9 +1,9 @@
 #!/bin/bash
 
-nemo_model='./model_bin2/nmt_en_zh_transformer6x6.nemo'
-encoder_onnx='./model_bin2/nmt_en_zh_transformer6x6_encoder.onnx'
-decoder_init_onnx='./model_bin2/nmt_en_zh_transformer6x6_decoder_init.onnx'
-decoder_onnx='./model_bin2/nmt_en_zh_transformer6x6_decoder.onnx'
+nemo_model='./model_bin/nmt_en_zh_transformer6x6.nemo'
+encoder_onnx='./model_bin/nmt_en_zh_transformer6x6_encoder.onnx'
+decoder_init_onnx='./model_bin/nmt_en_zh_transformer6x6_decoder_init.onnx'
+decoder_onnx='./model_bin/nmt_en_zh_transformer6x6_decoder.onnx'
 
 python utils/nemo2onnx.py \
 	--pt_model=${nemo_model} \
