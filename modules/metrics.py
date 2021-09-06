@@ -28,16 +28,16 @@ def eval_bleu(prediction_file, ground_truth_file, batch_size, lang):
                     else:
                         sacre_bleu = corpus_bleu(predictions, [ground_truths], tokenize="13a")
                     sb_score_list.append(sacre_bleu.score)
-                    logging.info(f'{i} texts evaled and the bleu score is {sacre_bleu}.')
+                    # logging.info(f'{i} texts evaled and the bleu score is {sacre_bleu}.')
                     predictions = []
                     ground_truths = []
 
             avg_sb_score = np.mean(sb_score_list)
-            logging.info(f'The final averaged bleu score is {avg_sb_score}.')
+            logging.info(f'The final averaged bleu score is {avg_sb_score}')
 
 if __name__=='__main__':
-    prediction_file = '../data/pred_nemo.zh'
-    ground_truth_file = '../data/test_1k.zh'
-    batch_size = 16
+    prediction_file = './data/pred_nemo.zh'
+    ground_truth_file = './data/test_1k.zh'
+    batch_size = 8
     lang = 'zh'
     eval_bleu(prediction_file, ground_truth_file, batch_size, lang)

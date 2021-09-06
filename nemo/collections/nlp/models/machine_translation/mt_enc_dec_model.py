@@ -28,6 +28,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.utilities import rank_zero_only
 from sacrebleu import corpus_bleu
 import time
+from utils.infer_utils import MeasureTime
 
 from nemo.collections.common.data import ConcatDataset
 from nemo.collections.common.losses import NLLLoss, SmoothedCrossEntropyLoss
@@ -681,7 +682,7 @@ class MTEncDecModel(EncDecNLPModel):
 
     @torch.no_grad()
     def batch_translate(
-        self, src: torch.LongTensor, src_mask: torch.LongTensor,
+        self, src: torch.LongTensor, src_mask: torch.LongTensor, measurements
     ):
         """	
         Translates a minibatch of inputs from source language to target language.	
@@ -695,34 +696,28 @@ class MTEncDecModel(EncDecNLPModel):
         mode = self.training
         try:
             self.eval()
-            t0=time.perf_counter()
-            src_hiddens = self.encoder(input_ids=src, encoder_mask=src_mask)
-            t1=time.perf_counter()
-            beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
-            t2=time.perf_counter()
-            print('enc time:',t1-t0)
-            print('beam search time:',t2-t1)
-            t3=time.perf_counter()
-            beam_results = self.filter_predicted_ids(beam_results)
+            with MeasureTime(measurements, "encoder_time"):
+                src_hiddens = self.encoder(input_ids=src, encoder_mask=src_mask)
+            with MeasureTime(measurements, "generator_time"):
+                beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
+            with MeasureTime(measurements, "postprocess_time"):
+                beam_results = self.filter_predicted_ids(beam_results)
+                translations = [self.decoder_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
+                inputs = [self.encoder_tokenizer.ids_to_text(inp) for inp in src.cpu().numpy()]
+                if self.target_processor is not None:
+                    translations = [
+                        self.target_processor.detokenize(translation.split(' ')) for translation in translations
+                    ]
 
-            translations = [self.decoder_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
-            inputs = [self.encoder_tokenizer.ids_to_text(inp) for inp in src.cpu().numpy()]
-            if self.target_processor is not None:
-                translations = [
-                    self.target_processor.detokenize(translation.split(' ')) for translation in translations
-                ]
-
-            if self.source_processor is not None:
-                inputs = [self.source_processor.detokenize(item.split(' ')) for item in inputs]
-            t4=time.perf_counter()
-            print('postprocess time:',t4-t3)
+                if self.source_processor is not None:
+                    inputs = [self.source_processor.detokenize(item.split(' ')) for item in inputs]
         finally:
             self.train(mode=mode)
         return inputs, translations
 
     # TODO: We should drop source/target_lang arguments in favor of using self.src/tgt_language
     @torch.no_grad()
-    def translate(self, text: List[str], source_lang: str = None, target_lang: str = None) -> List[str]:
+    def translate(self, text: List[str], source_lang: str = None, target_lang: str = None, measurements=None) -> List[str]:
         """
         Translates list of sentences from source language to target language.
         Should be regular text, this method performs its own tokenization/de-tokenization
@@ -734,7 +729,6 @@ class MTEncDecModel(EncDecNLPModel):
             list of translated strings
         """
         # __TODO__: This will reset both source and target processors even if you want to reset just one.
-        t0=time.perf_counter()
         if source_lang is not None or target_lang is not None:
             self.setup_pre_and_post_processing_utils(source_lang, target_lang)
 
@@ -748,25 +742,24 @@ class MTEncDecModel(EncDecNLPModel):
             prepend_ids = [src_symbol if src_symbol in self.multilingual_ids else tgt_symbol]
         try:
             self.eval()
-            inputs = []
-            for txt in text:
-                if self.source_processor is not None:
-                    txt = self.source_processor.normalize(txt)
-                    txt = self.source_processor.tokenize(txt)
-                # subword tokenize
-                ids = self.encoder_tokenizer.text_to_ids(txt)
-                ids = prepend_ids + [self.encoder_tokenizer.bos_id] + ids + [self.encoder_tokenizer.eos_id]
-                inputs.append(ids)
-            max_len = max(len(txt) for txt in inputs)
-            src_ids_ = np.ones((len(inputs), max_len)) * self.encoder_tokenizer.pad_id
-            for i, txt in enumerate(inputs):
-                src_ids_[i][: len(txt)] = txt
-            
-            src_mask = torch.FloatTensor((src_ids_ != self.encoder_tokenizer.pad_id)).to(self.device)
-            src = torch.LongTensor(src_ids_).to(self.device)
-            t1=time.perf_counter()
-            print('preprocess time:',t1-t0)
-            _, translations = self.batch_translate(src, src_mask)
+            with MeasureTime(measurements, "preprocess_time"):
+                inputs = []
+                for txt in text:
+                    if self.source_processor is not None:
+                        txt = self.source_processor.normalize(txt)
+                        txt = self.source_processor.tokenize(txt)
+                    # subword tokenize
+                    ids = self.encoder_tokenizer.text_to_ids(txt)
+                    ids = prepend_ids + [self.encoder_tokenizer.bos_id] + ids + [self.encoder_tokenizer.eos_id]
+                    inputs.append(ids)
+                max_len = max(len(txt) for txt in inputs)
+                src_ids_ = np.ones((len(inputs), max_len)) * self.encoder_tokenizer.pad_id
+                for i, txt in enumerate(inputs):
+                    src_ids_[i][: len(txt)] = txt
+                
+                src_mask = torch.FloatTensor((src_ids_ != self.encoder_tokenizer.pad_id)).to(self.device)
+                src = torch.LongTensor(src_ids_).to(self.device)
+            _, translations = self.batch_translate(src, src_mask,measurements)
         finally:
             self.train(mode=mode)
         return translations

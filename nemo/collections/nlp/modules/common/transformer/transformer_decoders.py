@@ -183,7 +183,7 @@ class TransformerDecoder(DecoderModule, Exportable):
     def init_forward(self, decoder_states, decoder_mask, encoder_states, encoder_mask):
         decoder_attn_mask = form_attention_mask(decoder_mask, diagonal=self.diagonal)
         encoder_attn_mask = form_attention_mask(encoder_mask)
-        memory_states = decoder_states 
+        memory_states = decoder_states
         cached_mems_list = [memory_states.unsqueeze(0)]
 
         for i, layer in enumerate(self.layers):

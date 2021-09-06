@@ -123,33 +123,52 @@ class BeamSearchGenerator:
         # tensorRT decoder engine
         cached_mems = torch.zeros(shape_of_output).cuda()
         if decoder_mems_list is None:
+            marked_outputs = [torch.zeros((batch_size,pos+1,hidden_size)).cuda() for i in range(5)]
             decoder_tensors = {
                     "inputs":
-                    {   "decoder_states": decoder_states,
+                    {   
+                        "decoder_states": decoder_states,
                         "decoder_mask": decoder_mask,
                         "encoder_states": encoder_hidden_states,
-                        "encoder_mask": encoder_mask},
+                        "encoder_mask": encoder_mask
+                    },
                     "outputs":
-                    {   "cached_mens": cached_mems}
+                    {   
+                        "cached_mems": cached_mems,
+                        "437": marked_outputs[0],
+                        "647": marked_outputs[1],
+                        "857": marked_outputs[2],
+                        "1067":marked_outputs[3],
+                        "1277":marked_outputs[4],
+                    }
             }
-            #print('decoder_tensors:',decoder_tensors)
             self.decoder_init.run_trt_engine(decoder_tensors)
         else:
+            marked_outputs = [torch.zeros((batch_size,16,1,pos+1)).cuda() for i in range(5)]
             decoder_tensors = {
                     "inputs":
-                    {   "decoder_states": decoder_states,
+                    {   
+                        "decoder_states": decoder_states,
                         "decoder_mask": decoder_mask,
                         "encoder_states": encoder_hidden_states,
                         "encoder_mask": encoder_mask,
-                        "decoder_mems": decoder_mems_list},
+                        "decoder_mems": decoder_mems_list
+                    },
                     "outputs":
-                    {   "cached_mens": cached_mems}
+                    {   
+                        "cached_mems": cached_mems,
+                        "(Unnamed Layer* 210) [Softmax]_output": marked_outputs[0],
+                        "(Unnamed Layer* 493) [Softmax]_output": marked_outputs[1],
+                        "(Unnamed Layer* 776) [Softmax]_output": marked_outputs[2],
+                        "(Unnamed Layer* 1059) [Softmax]_output": marked_outputs[3],
+                        "(Unnamed Layer* 1342) [Softmax]_output": marked_outputs[4],
+                    }
             }
-            #print('decoder_tensors:',decoder_tensors)
             self.decoder.run_trt_engine(decoder_tensors)
+            #print('marked_outputs:',marked_outputs)
         decoder_mems_list = cached_mems
+        #print('decoder_mems_list:',decoder_mems_list)
 
-        #print('decoder output:',decoder_mems_list)
         log_probs = self.log_softmax(hidden_states=decoder_mems_list[-1][:, -1:])
 
         return log_probs, decoder_mems_list

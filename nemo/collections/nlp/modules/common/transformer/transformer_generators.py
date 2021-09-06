@@ -108,7 +108,7 @@ class GreedySequenceGenerator:
                 decoder_mems_list,
                 return_mems=True,
             )
-            # print('decoder_mems_list:', decoder_mems_list)
+            print('decoder_mems_list:', decoder_mems_list)
         else:
             decoder_mems_list = self.decoder.forward(
                 decoder_hidden_states, decoder_input_mask, decoder_mems_list, return_mems=True
@@ -326,6 +326,7 @@ class BeamSearchSequenceGenerator(GreedySequenceGenerator):
             log_probs, decoder_mems_list = self._one_step_forward(
                 prefixes[:, -1:], encoder_hidden_states, encoder_input_mask, decoder_mems_list, i + 1
             )
+            sys.exit()
             scores_i, prefixes_i = torch.topk(log_probs[:, -1, :], self.beam_size, dim=-1)
 
             # for all prefixes ending with <eos> or <pad> replace generated
