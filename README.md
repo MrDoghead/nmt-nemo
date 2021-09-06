@@ -31,11 +31,11 @@ fp32 fp16 are supported, but trt has optimization bug for fp16, int8 is not supp
 Dockder env is recommanded for runting tensorrt inference, due to the cuda execution error.
 
 ```bash
-bash build
+bash ./docker/build
 ```
 
 ```bash
-bash interactive.sh
+bash ./docker/interactive.sh
 ```
 
 run convertion
