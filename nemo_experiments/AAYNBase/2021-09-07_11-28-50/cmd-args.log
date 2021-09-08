@@ -1,0 +1,1 @@
+./train/enc_dec_nmt.py --config-path=../conf --config-name=nmt_en_zh trainer.gpus=[0] ~trainer.max_epochs +trainer.max_steps=300000 model.beam_size=4

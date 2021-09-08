@@ -1,0 +1,140 @@
+commit hash: fdab80d799a7b4482225b1556d1dbb8485d1b44d
+diff --git a/README.md b/README.md
+index c9db1a4..1fef65d 100644
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,19 @@
+ 
+   pytorch lightning framework
+ 
+-  trained on wmt20-en-zh corpus
++  Datasets
++
++    News-Commentary http://data.statmt.org/news-commentary/v15/training/news-commentary-v15.en-zh.tsv.gz
++
++    WikiTitles - http://data.statmt.org/wikititles/v2/wikititles-v2.zh-en.tsv.gz
++
++    WikiMatrix - http://data.statmt.org/wmt20/translation-task/WikiMatrix/WikiMatrix.v1.en-zh.langid.tsv.gz
++
++    Backtranslated Chinese - http://data.statmt.org/wmt20/translation-task/back-translation/zh-en/news.translatedto.zh.gz
++    
++    Backtranslated English - http://data.statmt.org/wmt20/translation-task/back-translation/zh-en/news.en.gz
++
++    CC-Aligned - http://www.statmt.org/cc-aligned/sentence-aligned/en_XX-zh_CN.tsv.xz
+ 
+   **using pretrained nemo NMT model**
+ 
+diff --git a/conf/aayn_base.yaml b/conf/aayn_base.yaml
+index 0297a8d..7b9629d 100644
+--- a/conf/aayn_base.yaml
++++ b/conf/aayn_base.yaml
+@@ -14,8 +14,8 @@ model:
+   tgt_language: 'de'
+ 
+   train_ds:
+-    src_file_name: '/home/ubuntu/caodongnan/work/NeMo/nmt/data/prep_1kw_tagged_v2/train.en'
+-    tgt_file_name: '/home/ubuntu/caodongnan/work/NeMo/nmt/data/prep_1kw_tagged_v2/train.zh'
++    src_file_name: "../data/train.en" 
++    tgt_file_name: 
+     use_tarred_dataset: False # if true tar_file_name and meta_file_name will be used (or created automatically) 
+     # config for preprocessing training data and creating a tarred datset automatically
+     tar_file_prefix: parallel # prefix for tar file names
+@@ -39,8 +39,8 @@ model:
+     concat_sampling_probabilities: null # only used with ConcatTranslationDataset 
+ 
+   validation_ds:
+-    src_file_name: '/home/ubuntu/caodongnan/work/NeMo/nmt/data/prep_1kw_tagged_v2/val.en'
+-    tgt_file_name: '/home/ubuntu/caodongnan/work/NeMo/nmt/data/prep_1kw_tagged_v2/val.zh'
++    src_file_name: "../data/val.en" 
++    tgt_file_name: 
+     tokens_in_batch: 512
+     clean: false
+     max_seq_length: 512
+@@ -51,7 +51,7 @@ model:
+     num_workers: 8
+ 
+   test_ds:
+-    src_file_name: ???
++    src_file_name: ??? 
+     tgt_file_name: ???
+     tokens_in_batch: 512
+     clean: false
+diff --git a/train/enc_dec_nmt.py b/train/enc_dec_nmt.py
+index 5b0dd07..c935c47 100644
+--- a/train/enc_dec_nmt.py
++++ b/train/enc_dec_nmt.py
+@@ -30,66 +30,6 @@ from nemo.utils.config_utils import update_model_config
+ from nemo.utils.exp_manager import ExpManagerConfig, exp_manager
+ 
+ 
+-"""
+-Usage:
+- 1. If you need to start docker and install NeMo, otherwise skip this step:
+- 
+-    a. ```docker run --gpus all -it --rm -v /home/okuchaiev/repos/NeMo/:/NeMo -p 6006:6006  -v /mnt:/mnt --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 --device=/dev/snd nvcr.io/nvidia/pytorch:20.11-py3```
+-    b. ```cd /NeMo```
+-    c. ```./reinstall.sh```
+- 
+- 2. Train a new tokenizer (or use pre-trained one):
+-    ```yttm bpe --data /mnt/D1/Data/NMT/wmt16_de_en/train.clean.en-de.shuffled.common --model tokenizer.BPE.8192.model --vocab_size 8192```
+-
+-(To use WANDB, optionally, do login first)
+-``wandb login [YOUR WANDB login]``
+-    
+- 3. Start training:
+- 
+-
+- (This example for "base" model on 2 GPUs for 150000 steps with batch size of 12500 tokens per GPU)
+- 
+- python enc_dec_nmt.py \
+-      --config-path=conf \
+-      --config-name=aayn_base \
+-      trainer.gpus=[0,1] \
+-      ~trainer.max_epochs \
+-      +trainer.max_steps=150000 \
+-      model.beam_size=4 \
+-      model.max_generation_delta=5 \
+-      model.label_smoothing=0.1 \
+-      model.encoder_tokenizer.tokenizer_model=tokenizer.BPE.8192.model  \
+-      model.decoder_tokenizer.tokenizer_model=tokenizer.BPE.8192.model  \
+-      model.encoder.num_layers=6 \
+-      model.encoder.hidden_size=512 \
+-      model.encoder.inner_size=2048 \
+-      model.encoder.num_attention_heads=8 \
+-      model.encoder.ffn_dropout=0.1 \
+-      model.decoder.num_layers=6 \
+-      model.decoder.hidden_size=512 \
+-      model.decoder.inner_size=2048 \
+-      model.decoder.num_attention_heads=8 \
+-      model.decoder.ffn_dropout=0.1 \
+-      model.train_ds.src_file_name=/mnt/D1/Data/NMT/wmt16_de_en/train.clean.de.shuffled \
+-      model.train_ds.tgt_file_name=/mnt/D1/Data/NMT/wmt16_de_en/train.clean.en.shuffled \
+-      model.train_ds.tokens_in_batch=12500 \
+-      model.validation_ds.src_file_name=/mnt/D1/Data/NMT/wmt16_de_en/wmt14-en-de.ref \
+-      model.validation_ds.tgt_file_name=/mnt/D1/Data/NMT/wmt16_de_en/wmt14-en-de.src \
+-      model.validation_ds.tokens_in_batch=8192 \
+-      model.test_ds.src_file_name=/mnt/D1/Data/NMT/wmt16_de_en/wmt14-en-de.ref \
+-      model.test_ds.tgt_file_name=/mnt/D1/Data/NMT/wmt16_de_en/wmt14-en-de.src \
+-      model.optim.lr=0.001  \
+-      model.optim.sched.warmup_ratio=0.05 \
+-      +exp_manager.create_wandb_logger=True \
+-      +exp_manager.wandb_logger_kwargs.name=TEST-nmt-base \
+-      +exp_manager.wandb_logger_kwargs.project=nmt-de-en \
+-      +exp_manager.create_checkpoint_callback=True \
+-      +exp_manager.checkpoint_callback_params.monitor=val_sacreBLEU \
+-      +exp_manager.exp_dir=nmt_base \
+-      +exp_manager.checkpoint_callback_params.mode=max 
+-"""
+-
+-
+ @dataclass
+ class MTEncDecConfig(NemoConfig):
+     name: Optional[str] = 'MTEncDec'
+@@ -107,7 +47,6 @@ def main(cfg: MTEncDecConfig) -> None:
+     cfg = update_model_config(default_cfg, cfg)
+     logging.info("\n\n************** Experiment configuration ***********")
+     logging.info(f'Config: {OmegaConf.to_yaml(cfg)}')
+-    sys.exit()
+ 
+     # training is managed by PyTorch Lightning
+     trainer_cfg = OmegaConf.to_container(cfg.trainer)

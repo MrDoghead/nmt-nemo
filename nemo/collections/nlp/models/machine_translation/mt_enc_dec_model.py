@@ -75,6 +75,7 @@ class MTEncDecModel(EncDecNLPModel):
         # Instantiates tokenizers and register to be saved with NeMo Model archive
         # After this call, ther will be self.encoder_tokenizer and self.decoder_tokenizer
         # Which can convert between tokens and token_ids for SRC and TGT languages correspondingly.
+        print('self.setup_enc_dec_tokenizers...')
         self.setup_enc_dec_tokenizers(
             encoder_tokenizer_library=cfg.encoder_tokenizer.get('library', 'yttm'),
             encoder_tokenizer_model=cfg.encoder_tokenizer.get('tokenizer_model'),
@@ -123,11 +124,14 @@ class MTEncDecModel(EncDecNLPModel):
 
         else:
             # After this call, the model will have  self.source_processor and self.target_processor objects
+            print('self.setup_pre_and_post_processing_utils...')
             self.setup_pre_and_post_processing_utils(source_lang=self.src_language, target_lang=self.tgt_language)
             self.multilingual_ids = [None]
 
         # TODO: Why is this base constructor call so late in the game?
+        print('super init...')
         super().__init__(cfg=cfg, trainer=trainer)
+        sys.exit()
 
         # encoder from NeMo, Megatron-LM, or HuggingFace
         encoder_cfg_dict = OmegaConf.to_container(cfg.get('encoder'))
@@ -136,6 +140,7 @@ class MTEncDecModel(EncDecNLPModel):
         model_name = encoder_cfg_dict.pop('model_name', None)
         pretrained = encoder_cfg_dict.pop('pretrained', False)
         checkpoint_file = encoder_cfg_dict.pop('checkpoint_file', None)
+        print('enc get_transformer...')
         self.encoder = get_transformer(
             library=library,
             model_name=model_name,
@@ -153,6 +158,7 @@ class MTEncDecModel(EncDecNLPModel):
         model_name = decoder_cfg_dict.pop('model_name', None)
         pretrained = decoder_cfg_dict.pop('pretrained', False)
         decoder_cfg_dict['hidden_size'] = self.encoder.hidden_size
+        print('dec get_transformer...')
         self.decoder = get_transformer(
             library=library,
             model_name=model_name,

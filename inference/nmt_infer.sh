@@ -1,8 +1,8 @@
 #!/bin/sh
 
 model_path='./model_bin/nmt_en_zh_transformer6x6.nemo'
-src_path='./data/test_1k.en'
-tgt_path='./data/pred_nemo.zh'
+src_path='./data/test.1k.en'
+tgt_path='./data/pred.1k.nemo.zh'
 src_lang='en'
 tgt_lang='zh'
 batch_size=1

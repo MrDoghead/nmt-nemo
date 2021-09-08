@@ -36,8 +36,8 @@ def eval_bleu(prediction_file, ground_truth_file, batch_size, lang):
             logging.info(f'The final averaged bleu score is {avg_sb_score}')
 
 if __name__=='__main__':
-    prediction_file = './data/pred_nemo.zh'
-    ground_truth_file = './data/test_1k.zh'
+    prediction_file = './data/pred.1k.nemo.zh'
+    ground_truth_file = './data/test.1k.zh'
     batch_size = 8
     lang = 'zh'
     eval_bleu(prediction_file, ground_truth_file, batch_size, lang)

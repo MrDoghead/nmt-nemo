@@ -1,0 +1,5 @@
+[NeMo W 2021-09-07 11:24:06 optimizers:47] Apex was not found. Using the lamb optimizer will error out.
+[NeMo E 2021-09-07 11:24:13 exp_manager:761] The checkpoint callback was told to monitor a validation value but trainer.max_epochs(1000) was less than trainer.check_val_every_n_epoch(3000). It is very likely this run will fail with ModelCheckpoint(monitor='val_loss') not found in the returned metrics. Please ensure that validation is run within trainer.max_epochs.
+[NeMo W 2021-09-07 11:24:13 nemo_logging:349] /home/ubuntu/anaconda3/lib/python3.8/site-packages/pytorch_lightning/callbacks/model_checkpoint.py:396: LightningDeprecationWarning: Argument `period` in `ModelCheckpoint` is deprecated in v1.3 and will be removed in v1.5. Please use `every_n_val_epochs` instead.
+      rank_zero_deprecation(
+    

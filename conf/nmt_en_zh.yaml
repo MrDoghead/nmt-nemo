@@ -1,4 +1,4 @@
-name: AttentionIsAllYouNeed
+name: AttentionIsAllYouNeed 
 do_training: True # set to False if only preprocessing data
 do_testing: False # set to True to run evaluation on test data after training
 
@@ -11,11 +11,11 @@ model:
   shared_tokenizer: True # train tokenizer model across src and tgt train data
   preproc_out_dir: null # path to store data preprocessing outputs
   src_language: 'en'
-  tgt_language: 'de'
+  tgt_language: 'zh'
 
   train_ds:
-    src_file_name: "../data/train.en" 
-    tgt_file_name: 
+    src_file_name: "./data/train.10m.en" 
+    tgt_file_name: "./data/train.10m.zh"
     use_tarred_dataset: False # if true tar_file_name and meta_file_name will be used (or created automatically) 
     # config for preprocessing training data and creating a tarred datset automatically
     tar_file_prefix: parallel # prefix for tar file names
@@ -26,7 +26,7 @@ model:
     tar_shuffle_n: 100 # How many samples to look ahead and load to be shuffled
     shard_strategy: scatter # tarred dataset shard distribution strategy
     n_preproc_jobs: -2 # number of processes to use for data preprocessing (-2 means all but 2)
-    tokens_in_batch: 512
+    tokens_in_batch: 16000
     clean: true
     max_seq_length: 512
     shuffle: true
@@ -39,8 +39,8 @@ model:
     concat_sampling_probabilities: null # only used with ConcatTranslationDataset 
 
   validation_ds:
-    src_file_name: "../data/val.en" 
-    tgt_file_name: 
+    src_file_name: "./data/val.1m.en" 
+    tgt_file_name: "./data/val.1m.zh"
     tokens_in_batch: 512
     clean: false
     max_seq_length: 512
@@ -51,8 +51,8 @@ model:
     num_workers: 8
 
   test_ds:
-    src_file_name: ??? 
-    tgt_file_name: ???
+    src_file_name: "./data/test.1k.en"
+    tgt_file_name: "./data/test.1k.zh"
     tokens_in_batch: 512
     clean: false
     max_seq_length: 512
@@ -64,7 +64,7 @@ model:
 
   optim:
     name: adam
-    lr: 0.001
+    lr: 0.0004
     betas:
       - 0.9
       - 0.98
@@ -77,7 +77,7 @@ model:
 
   encoder_tokenizer:
     library: yttm
-    tokenizer_model: null
+    tokenizer_model: "./model_bin/tokenizer.encoder.32000.BPE.model"
     vocab_size: null # vocab size for training bpe
     bpe_dropout: null
     vocab_file: null
@@ -87,7 +87,7 @@ model:
 
   decoder_tokenizer:
     library: yttm
-    tokenizer_model: null
+    tokenizer_model: "./model_bin/tokenizer.decoder.32000.BPE.model"
     vocab_size: null # vocab size for training bpe
     bpe_dropout: null
     vocab_file: null
@@ -100,7 +100,7 @@ model:
     model_name: null
     pretrained: false
     max_sequence_length: 512
-    num_token_types: 0
+    num_token_types: 2
     embedding_dropout: 0.1
     learn_positional_encodings: false
     hidden_size: 512
@@ -142,16 +142,16 @@ model:
     use_transformer_init: true
 
 trainer:
-  gpus: 4
+  gpus: 1
   num_nodes: 1
-  max_epochs: 200
-  amp_level: O2 # O1/O2 for mixed precision
-  precision: 16 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
+  max_epochs: 300000
+  amp_level: O0 # 00 for full precision and O1/O2 for mixed precision
+  precision: 32 # Should be set to 16 for O1 and O2, default is 16 as PT ignores it when am_level is O0
   accelerator: ddp
   checkpoint_callback: False
   logger: False
-  log_every_n_steps: 50  # Interval of logging.
-  check_val_every_n_epoch: 1
+  log_every_n_steps: 30000  # Interval of logging.
+  check_val_every_n_epoch: 3000
 
 exp_manager:
   name: AAYNBase

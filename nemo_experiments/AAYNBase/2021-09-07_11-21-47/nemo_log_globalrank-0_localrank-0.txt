@@ -1,0 +1,283 @@
+[NeMo W 2021-09-07 11:21:40 optimizers:47] Apex was not found. Using the lamb optimizer will error out.
+[NeMo I 2021-09-07 11:21:47 enc_dec_nmt:48] 
+    
+    ************** Experiment configuration ***********
+[NeMo I 2021-09-07 11:21:47 enc_dec_nmt:49] Config: name: AttentionIsAllYouNeed
+    model:
+      train_ds:
+        src_file_name: ../data/train.en
+        tgt_file_name: ../data/train.zh
+        use_tarred_dataset: false
+        tar_files: null
+        metadata_file: null
+        lines_per_dataset_fragment: 1000000
+        num_batches_per_tarfile: 100
+        shard_strategy: scatter
+        tokens_in_batch: 16000
+        clean: true
+        max_seq_length: 512
+        min_seq_length: 1
+        cache_ids: false
+        cache_data_per_node: false
+        use_cache: false
+        shuffle: true
+        num_samples: -1
+        drop_last: false
+        pin_memory: false
+        num_workers: 8
+        reverse_lang_direction: false
+        load_from_tarred_dataset: false
+        metadata_path: null
+        tar_shuffle_n: 100
+        n_preproc_jobs: -2
+        tar_file_prefix: parallel
+        concat_sampling_technique: temperature
+        concat_sampling_temperature: 5
+        concat_sampling_probabilities: null
+      validation_ds:
+        src_file_name: ../data/val.en
+        tgt_file_name: ../data/val.zh
+        use_tarred_dataset: false
+        tar_files: null
+        metadata_file: null
+        lines_per_dataset_fragment: 1000000
+        num_batches_per_tarfile: 1000
+        shard_strategy: scatter
+        tokens_in_batch: 512
+        clean: false
+        max_seq_length: 512
+        min_seq_length: 1
+        cache_ids: false
+        cache_data_per_node: false
+        use_cache: false
+        shuffle: false
+        num_samples: -1
+        drop_last: false
+        pin_memory: false
+        num_workers: 8
+        reverse_lang_direction: false
+        load_from_tarred_dataset: false
+        metadata_path: null
+        tar_shuffle_n: 100
+        n_preproc_jobs: -2
+        tar_file_prefix: parallel
+        concat_sampling_technique: temperature
+        concat_sampling_temperature: 5
+        concat_sampling_probabilities: null
+      test_ds:
+        src_file_name: ../data/test.en
+        tgt_file_name: ../data/test.zh
+        use_tarred_dataset: false
+        tar_files: null
+        metadata_file: null
+        lines_per_dataset_fragment: 1000000
+        num_batches_per_tarfile: 1000
+        shard_strategy: scatter
+        tokens_in_batch: 512
+        clean: false
+        max_seq_length: 512
+        min_seq_length: 1
+        cache_ids: false
+        cache_data_per_node: false
+        use_cache: false
+        shuffle: false
+        num_samples: -1
+        drop_last: false
+        pin_memory: false
+        num_workers: 8
+        reverse_lang_direction: false
+        load_from_tarred_dataset: false
+        metadata_path: null
+        tar_shuffle_n: 100
+        n_preproc_jobs: -2
+        tar_file_prefix: parallel
+        concat_sampling_technique: temperature
+        concat_sampling_temperature: 5
+        concat_sampling_probabilities: null
+      optim:
+        name: adam
+        lr: 0.0004
+        betas:
+        - 0.9
+        - 0.98
+        weight_decay: 0.0
+        sched:
+          name: InverseSquareRootAnnealing
+          min_lr: 0.0
+          last_epoch: -1
+          warmup_ratio: 0.1
+      encoder_tokenizer:
+        library: yttm
+        tokenizer_model: ../model_bin/tokenizer.encoder.32000.BPE.model
+        vocab_size: null
+        bpe_dropout: null
+        vocab_file: null
+        special_tokens: null
+        training_sample_size: null
+        r2l: false
+      decoder_tokenizer:
+        library: yttm
+        tokenizer_model: ../model_bin/tokenizer.decoder.32000.BPE.model
+        vocab_size: null
+        bpe_dropout: null
+        vocab_file: null
+        special_tokens: null
+        training_sample_size: null
+        r2l: false
+      encoder:
+        library: nemo
+        model_name: null
+        pretrained: false
+        max_sequence_length: 512
+        num_token_types: 2
+        embedding_dropout: 0.1
+        learn_positional_encodings: false
+        hidden_size: 512
+        num_layers: 6
+        inner_size: 2048
+        num_attention_heads: 8
+        ffn_dropout: 0.1
+        attn_score_dropout: 0.1
+        attn_layer_dropout: 0.1
+        hidden_act: relu
+        mask_future: false
+        pre_ln: false
+        pre_ln_final_layer_norm: true
+      decoder:
+        library: nemo
+        model_name: null
+        pretrained: false
+        max_sequence_length: 512
+        num_token_types: 0
+        embedding_dropout: 0.1
+        learn_positional_encodings: false
+        hidden_size: 512
+        inner_size: 2048
+        num_layers: 6
+        num_attention_heads: 8
+        ffn_dropout: 0.1
+        attn_score_dropout: 0.1
+        attn_layer_dropout: 0.1
+        hidden_act: relu
+        pre_ln: false
+        pre_ln_final_layer_norm: true
+      head:
+        num_layers: 1
+        activation: relu
+        log_softmax: true
+        dropout: 0.0
+        use_transformer_init: true
+      num_val_examples: 3
+      num_test_examples: 3
+      max_generation_delta: 5
+      label_smoothing: 0.1
+      beam_size: 4
+      len_pen: 0.6
+      src_language: en
+      tgt_language: zh
+      find_unused_parameters: true
+      shared_tokenizer: true
+      multilingual: false
+      preproc_out_dir: null
+    trainer:
+      logger: false
+      checkpoint_callback: false
+      callbacks: null
+      default_root_dir: null
+      gradient_clip_val: 0.0
+      process_position: 0
+      num_nodes: 1
+      num_processes: 1
+      gpus:
+      - 0
+      auto_select_gpus: false
+      tpu_cores: null
+      log_gpu_memory: null
+      progress_bar_refresh_rate: 1
+      overfit_batches: 0.0
+      track_grad_norm: -1
+      check_val_every_n_epoch: 3000
+      fast_dev_run: false
+      accumulate_grad_batches: 1
+      max_epochs: 1000
+      min_epochs: 1
+      max_steps: 300000
+      min_steps: null
+      limit_train_batches: 1.0
+      limit_val_batches: 1.0
+      limit_test_batches: 1.0
+      val_check_interval: 1.0
+      flush_logs_every_n_steps: 100
+      log_every_n_steps: 30000
+      accelerator: ddp
+      sync_batchnorm: false
+      precision: 16
+      weights_summary: full
+      weights_save_path: null
+      num_sanity_val_steps: 2
+      truncated_bptt_steps: null
+      resume_from_checkpoint: null
+      profiler: null
+      benchmark: false
+      deterministic: false
+      reload_dataloaders_every_epoch: false
+      auto_lr_find: false
+      replace_sampler_ddp: true
+      terminate_on_nan: false
+      auto_scale_batch_size: false
+      prepare_data_per_node: true
+      amp_backend: native
+      amp_level: O2
+      plugins: null
+      move_metrics_to_cpu: false
+      multiple_trainloader_mode: max_size_cycle
+      limit_predict_batches: 1.0
+      stochastic_weight_avg: false
+      gradient_clip_algorithm: norm
+      max_time: null
+    exp_manager:
+      explicit_log_dir: null
+      exp_dir: null
+      name: AAYNBase
+      version: null
+      use_datetime_version: true
+      resume_if_exists: false
+      resume_past_end: false
+      resume_ignore_no_checkpoint: false
+      create_tensorboard_logger: true
+      summary_writer_kwargs: null
+      create_wandb_logger: false
+      wandb_logger_kwargs: null
+      create_checkpoint_callback: true
+      checkpoint_callback_params:
+        filepath: null
+        dirpath: null
+        filename: null
+        monitor: val_loss
+        verbose: true
+        save_last: true
+        save_top_k: 3
+        save_weights_only: false
+        mode: min
+        period: 1
+        prefix: null
+        postfix: .nemo
+        save_best_model: false
+        always_save_nemo: false
+      files_to_copy: []
+    hydra:
+      run:
+        dir: .
+      job_logging:
+        root:
+          handlers: null
+    do_training: true
+    do_testing: false
+    
+[NeMo I 2021-09-07 11:21:47 exp_manager:217] Experiments will be logged at /home/ubuntu/caodongnan/work/NeMo/nmt/nemo_experiments/AAYNBase/2021-09-07_11-21-47
+[NeMo I 2021-09-07 11:21:47 exp_manager:564] TensorboardLogger has been set up
+[NeMo E 2021-09-07 11:21:47 exp_manager:761] The checkpoint callback was told to monitor a validation value but trainer.max_epochs(1000) was less than trainer.check_val_every_n_epoch(3000). It is very likely this run will fail with ModelCheckpoint(monitor='val_loss') not found in the returned metrics. Please ensure that validation is run within trainer.max_epochs.
+[NeMo W 2021-09-07 11:21:47 nemo_logging:349] /home/ubuntu/anaconda3/lib/python3.8/site-packages/pytorch_lightning/callbacks/model_checkpoint.py:396: LightningDeprecationWarning: Argument `period` in `ModelCheckpoint` is deprecated in v1.3 and will be removed in v1.5. Please use `every_n_val_epochs` instead.
+      rank_zero_deprecation(
+    
+[NeMo I 2021-09-07 11:21:47 tokenizer_utils:132] Getting YouTokenToMeTokenizer with model: None.

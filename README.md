@@ -4,7 +4,25 @@
 
   pytorch lightning framework
 
-  trained on wmt20-en-zh corpus
+  Datasets
+
+    News-Commentary http://data.statmt.org/news-commentary/v15/training/news-commentary-v15.en-zh.tsv.gz
+
+    WikiTitles - http://data.statmt.org/wikititles/v2/wikititles-v2.zh-en.tsv.gz
+
+    WikiMatrix - http://data.statmt.org/wmt20/translation-task/WikiMatrix/WikiMatrix.v1.en-zh.langid.tsv.gz
+
+    Backtranslated Chinese - http://data.statmt.org/wmt20/translation-task/back-translation/zh-en/news.translatedto.zh.gz
+    
+    Backtranslated English - http://data.statmt.org/wmt20/translation-task/back-translation/zh-en/news.en.gz
+
+    CC-Aligned - http://www.statmt.org/cc-aligned/sentence-aligned/en_XX-zh_CN.tsv.xz
+
+  Datasets2
+    
+    UNv1.0.en-zh
+
+    WMT'18, WMT'19 and WMT'20 test sets
 
   **using pretrained nemo NMT model**
 
